@@ -9,6 +9,7 @@ from aiohttp import ClientSession, ClientTimeout
 
 from .api import BiliApi
 from .constants import BiliConstants
+from .danmaku_state import DanmakuStateStore
 from .exceptions import LoginError
 from .logger_manager import LogManager
 from .services import AuthService, DanmakuService, GroupService, HeartbeatService, LikeService, MedalService
@@ -44,10 +45,12 @@ class BiliUser:
 
         # 业务服务层
         self.auth_service = AuthService(self.api)
+        self.danmaku_state_store = DanmakuStateStore()
         self.medal_service = MedalService(
             self.api, self.whiteList, self.bannedList)
         self.like_service = LikeService(self.api)
-        self.danmaku_service = DanmakuService(self.api)
+        self.danmaku_service = DanmakuService(
+            self.api, state_store=self.danmaku_state_store)
         self.heartbeat_service = HeartbeatService(self.api)
         self.group_service = GroupService(self.api)
         self.stats_service = None  # 将在登录验证后初始化
@@ -87,7 +90,8 @@ class BiliUser:
             self.medal_service = MedalService(
                 self.api, self.whiteList, self.bannedList, self.log)
             self.like_service = LikeService(self.api, self.log)
-            self.danmaku_service = DanmakuService(self.api, self.log)
+            self.danmaku_service = DanmakuService(
+                self.api, self.log, self.danmaku_state_store)
             self.heartbeat_service = HeartbeatService(self.api, self.log)
             self.group_service = GroupService(self.api, self.log)
             # 获取初始佩戴勋章信息
@@ -113,7 +117,7 @@ class BiliUser:
 
     async def get_medals(self, show_logs: bool = True):
         """获取用户勋章"""
-        classified_medals = await self.medal_service.execute(show_logs)
+        classified_medals = await self.medal_service.execute(show_logs, self.config)
 
         # 清空原有勋章列表
         self._clear_medal_lists()

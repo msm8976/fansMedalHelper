@@ -194,9 +194,10 @@ class BiliApi:
             "appkey": BiliConstants.APPKEY,
             "ts": get_timestamp(),
         }
+        message = random.choice(BiliConstants.DANMAKU_LIST)
         data = {
             "cid": room_id,
-            "msg": random.choice(BiliConstants.DANMAKU_LIST),
+            "msg": message,
             "rnd": get_timestamp(),
             "color": "16777215",
             "fontsize": "25",
@@ -224,17 +225,18 @@ class BiliApi:
             if resp.get("mode_info") and resp["mode_info"].get("extra"):
                 return json.loads(resp["mode_info"]["extra"])["content"]
             else:
-                return "弹幕发送成功"
+                return f"弹幕发送成功: {message}"
 
         except BiliApiError as e:
             if "已经发送过" in str(e):
-                return "重复弹幕"
+                return "今日已发送过弹幕"
             elif e.code == 0:  # 特殊情况，code为0但有错误信息时重试
                 # 重试发送简单弹幕
                 try:
                     await asyncio.sleep(self.u.config.get("DANMAKU_CD", 3))
                     params.update({"ts": get_timestamp()})
-                    data.update({"msg": "111"})
+                    retry_message = "111"
+                    data.update({"msg": retry_message})
 
                     resp = await self.session.post(
                         url, params=SignableDict(
@@ -245,7 +247,7 @@ class BiliApi:
                     if resp.get("mode_info") and resp["mode_info"].get("extra"):
                         return json.loads(resp["mode_info"]["extra"])["content"]
                     else:
-                        return "弹幕发送成功"
+                        return f"弹幕发送成功: {retry_message}"
                 except Exception as retry_error:
                     raise e from retry_error
             else:

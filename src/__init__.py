@@ -1,6 +1,7 @@
 from .api import BiliApi
 from .config import Config
 from .constants import BiliConstants
+from .danmaku_state import DanmakuStateStore
 from .exceptions import BiliApiError, BiliException, ConfigError, LoginError
 from .logger_manager import LogManager
 from .models import AnchorInfo, Group, Medal, MedalWithRoom, RoomInfo, UserInfo
@@ -15,6 +16,7 @@ __all__ = [
     'BiliApi',
     'Config',
     'BiliConstants',
+    'DanmakuStateStore',
     'BiliException',
     'BiliApiError',
     'LoginError',

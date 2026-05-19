@@ -8,6 +8,7 @@ from typing import Any
 
 from .api import BiliApi
 from .constants import BiliConstants
+from .danmaku_state import DanmakuStateStore
 from .exceptions import BiliException, LoginError
 from .logger_manager import LogManager
 from .models import UserInfo
@@ -94,7 +95,11 @@ class MedalService(BaseService):
 
         return medals
 
-    def classify_medals(self, medals: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    def classify_medals(
+        self,
+        medals: list[dict[str, Any]],
+        config: dict[str, Any] | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
         """分类勋章"""
         classified = {
             'all': [],
@@ -102,6 +107,7 @@ class MedalService(BaseService):
             'living': [],       # 开播中的勋章
             'no_living': []     # 未开播的勋章
         }
+        danmaku_all_offline = bool((config or {}).get('DANMAKU_ALL_OFFLINE'))
 
         for medal in medals:
             medal_data = safe_get(medal, 'medal', default={})
@@ -115,7 +121,7 @@ class MedalService(BaseService):
             if room_status == 1:
                 classified['living'].append(medal)
 
-            if medal_lighted == 0 and room_status != 1:
+            if room_status != 1 and (danmaku_all_offline or medal_lighted == 0):
                 classified['no_living'].append(medal)
 
             if today_feed < BiliConstants.Tasks.WATCH_INTIMACY_LIMIT:
@@ -123,10 +129,14 @@ class MedalService(BaseService):
 
         return classified
 
-    async def execute(self, show_logs: bool = True, *args, **kwargs) -> dict[str, list[dict[str, Any]]]:
+    async def execute(
+        self,
+        show_logs: bool = True,
+        config: dict[str, Any] | None = None,
+    ) -> dict[str, list[dict[str, Any]]]:
         """执行勋章获取和分类"""
         medals = await self.get_all_medals(show_logs)
-        return self.classify_medals(medals)
+        return self.classify_medals(medals, config)
 
 
 class LikeService(BaseService):
@@ -203,6 +213,10 @@ class LikeService(BaseService):
 class DanmakuService(BaseService):
     """弹幕服务"""
 
+    def __init__(self, api: BiliApi, logger=None, state_store: DanmakuStateStore | None = None):
+        super().__init__(api, logger)
+        self.state_store = state_store
+
     async def send_danmaku_to_medals(self, medals: list[dict[str, Any]], config: dict[str, Any]) -> int:
         """向勋章发送弹幕"""
         if not config.get('DANMAKU_CD'):
@@ -221,6 +235,8 @@ class DanmakuService(BaseService):
         self.log.info(f"弹幕打卡任务开始....(预计 {estimated_time} 秒完成)")
 
         success_count = 0
+        sent_any = False
+        danmaku_num = config.get('DANMAKU_NUM', 10)
 
         for n, medal in enumerate(medals, 1):
             if config.get('WEARMEDAL'):
@@ -229,26 +245,69 @@ class DanmakuService(BaseService):
 
             anchor_name = medal['anchor_info']['nick_name']
             room_id = medal['room_info']['room_id']
+            if self._has_sent_today(room_id, anchor_name):
+                continue
 
-            for i in range(config.get('DANMAKU_NUM', 10)):
-                try:
-                    ret_msg = await self.api.sendDanmaku(room_id)
-                    self.log.debug(f"{anchor_name}: {ret_msg}")
-
-                    if "重复弹幕" in ret_msg:
-                        self.log.warning(f"{anchor_name}: 重复弹幕, 跳过后续弹幕")
-                        break
-
+            success_messages = []
+            for i in range(danmaku_num):
+                if sent_any:
                     await asyncio.sleep(config.get('DANMAKU_CD', 3))
 
+                try:
+                    sent_any = True
+                    ret_msg = await self.api.sendDanmaku(room_id)
                 except Exception as e:
                     self.log.error(f"{anchor_name} 弹幕发送失败: {e}")
                     break
-            else:
+
+                if "今日已发送过弹幕" in ret_msg:
+                    self.log.warning(f"{anchor_name}: 今日已发送过弹幕，跳过后续弹幕")
+                    break
+
+                if self._is_send_success(ret_msg):
+                    success_messages.append(ret_msg)
+                    self.log.success(
+                        f"{anchor_name}: {ret_msg} {i + 1}/{danmaku_num} "
+                        f"({n}/{len(medals)})"
+                    )
+                    continue
+
+                self.log.debug(f"{anchor_name}: {ret_msg}")
+
+            if len(success_messages) == danmaku_num:
+                self._record_sent(room_id, success_messages[-1])
                 success_count += 1
-                self.log.success(f"{anchor_name} 弹幕打卡成功 {n}/{len(medals)}")
 
         return success_count
+
+    def _has_sent_today(self, room_id: int, anchor_name: str) -> bool:
+        if self.state_store is None:
+            raise ValueError("弹幕状态存储未初始化")
+
+        try:
+            has_sent = self.state_store.has_sent_today(self.api.u.mid, room_id)
+        except Exception:
+            self.log.exception("读取弹幕状态失败")
+            raise
+
+        if has_sent:
+            self.log.info(f"{anchor_name}: 今日已发送过弹幕，跳过")
+            return True
+
+        return False
+
+    def _record_sent(self, room_id: int, ret_msg: str) -> None:
+        if self.state_store is None:
+            raise ValueError("弹幕状态存储未初始化")
+
+        try:
+            self.state_store.record_sent(self.api.u.mid, room_id, ret_msg)
+        except Exception:
+            self.log.exception("写入弹幕状态失败")
+            raise
+
+    def _is_send_success(self, ret_msg: str) -> bool:
+        return ret_msg.startswith("弹幕发送成功:")
 
     async def execute(self, medals: list[dict[str, Any]], config: dict[str, Any]) -> int:
         """执行弹幕任务"""
