@@ -7,8 +7,8 @@ class BiliConstants:
     """B站相关常量"""
 
     # API相关
-    APPKEY = "783bbb7264451d82"
-    APPSECRET = "2653583c8873dea268ab9386918b1d65"
+    APPKEY = "4409e2ce8ffd12b8"
+    APPSECRET = "59b43e04ad6965f34319062b478f83dd"
     APPBUILD = "6731100"
 
     # Headers
@@ -48,7 +48,7 @@ class BiliConstants:
         SEND_DANMAKU = "https://api.live.bilibili.com/xlive/app-room/v1/dM/sendmsg"
         LOGIN_INFO = "https://api.bilibili.com/x/web-interface/nav"
         USER_INFO = "https://api.live.bilibili.com/xlive/web-ucenter/user/get_user_info"
-        MEDALS_INFO = "https://api.live.bilibili.com/xlive/web-ucenter/v1/fansMedal/medal"
+        MY_MEDALS = "https://api.live.bilibili.com/xlive/app-ucenter/v1/user/GetMyMedals"
         HEARTBEAT = "https://live-trace.bilibili.com/xlive/data-interface/v1/heartbeat/mobileHeartBeat"
         WEAR_MEDAL = "https://api.live.bilibili.com/xlive/app-room/v1/fansMedal/wear"
         GROUPS = "https://api.vc.bilibili.com/link_group/v1/member/my_groups"
@@ -64,7 +64,8 @@ class BiliConstants:
     # 任务相关
     class Tasks:
         MAX_RETRY_TIMES = 10
-        LIKE_COUNT_SYNC = 30
-        LIKE_COUNT_ASYNC = 35
+        LIKE_CLICK_MIN = 30
+        LIKE_CLICK_MAX = 30
         HEARTBEAT_INTERVAL = 60  # 秒
         DEFAULT_PAGE_SIZE = 50
+        MY_MEDALS_PAGE_SIZE = 10

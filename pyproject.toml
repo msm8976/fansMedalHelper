@@ -10,5 +10,6 @@ dependencies = [
     "apscheduler>=3.10.0",
     "loguru>=0.7.0",
     "onepush>=1.5.0",
+    "qrcode>=8.0",
     "pyyaml>=6.0.0",
 ]

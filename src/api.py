@@ -1,6 +1,8 @@
 import asyncio
+import hashlib
 import json
 import random
+import string
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
@@ -125,21 +127,48 @@ class BiliApi:
             {"Content-Type": "application/x-www-form-urlencoded"})
         await self._post(url, data=SignableDict(data).signed, headers=self.headers)
 
-    async def likeInteractV3(self, room_id: int, up_id: int, self_uid: int):
+    def _sign_like_payload(self, data: dict) -> dict:
+        """点赞接口按外部实现使用未 urlencode 的参数串签名。"""
+        sorted_data = dict(sorted(data.items()))
+        query = "&".join(f"{key}={value}" for key, value in sorted_data.items())
+        sign = hashlib.md5(f"{query}{BiliConstants.APPSECRET}".encode()).hexdigest()
+        return {**sorted_data, "sign": sign}
+
+    def _like_headers(self) -> dict:
+        buvid = "".join(
+            random.choices(string.ascii_uppercase + string.digits, k=37)
+        )
+        return {
+            **self.headers,
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Buvid": buvid,
+            "env": "prod",
+        }
+
+    async def likeInteractV3(
+        self,
+        room_id: int,
+        up_id: int,
+        self_uid: int,
+        *,
+        click_time: int = 1,
+    ):
         """点赞直播间V3"""
         url = BiliConstants.URLs.LIKE_INTERACT_V3
         data = {
             "access_key": self.u.access_key,
             "actionKey": "appkey",
             "appkey": BiliConstants.APPKEY,
-            "click_time": 1,
+            "click_time": click_time,
             "room_id": room_id,
             "anchor_id": up_id,
-            "uid": up_id,
+            "uid": self_uid,
         }
-        self.headers.update(
-            {"Content-Type": "application/x-www-form-urlencoded"})
-        await self._post(url, data=SignableDict(data).signed, headers=self.headers)
+        await self._post(
+            url,
+            data=self._sign_like_payload(data),
+            headers=self._like_headers(),
+        )
 
     async def shareRoom(self, room_id: int):
         """分享直播间"""
@@ -248,12 +277,40 @@ class BiliApi:
 
     async def getMedalsInfoByUid(self, uid: int):
         """根据UID获取勋章信息"""
-        url = BiliConstants.URLs.MEDALS_INFO
+        async for medal in self.getMyMedals():
+            if int(medal.get("target_id", 0)) == int(uid):
+                return {
+                    "has_fans_medal": True,
+                    "my_fans_medal": medal,
+                }
+
+        return {
+            "has_fans_medal": False,
+            "my_fans_medal": None,
+        }
+
+    async def getMyMedals(self) -> AsyncGenerator[dict]:
+        """获取自己持有的粉丝勋章"""
+        page = 1
+        total_page = 1
+
+        while page <= total_page:
+            data = await self._get_my_medals_page(page)
+            for medal in data.get("items", []):
+                yield medal
+
+            page_info = data.get("page_info", {})
+            total_page = max(1, int(page_info.get("total_page", page)))
+            page += 1
+
+    async def _get_my_medals_page(self, page: int) -> dict:
+        url = BiliConstants.URLs.MY_MEDALS
         params = {
-            "target_id": uid,
             "access_key": self.u.access_key,
             "actionKey": "appkey",
             "appkey": BiliConstants.APPKEY,
+            "page": page,
+            "page_size": BiliConstants.Tasks.MY_MEDALS_PAGE_SIZE,
             "ts": get_timestamp(),
         }
         return await self._get(url, params=SignableDict(params).signed, headers=self.headers)

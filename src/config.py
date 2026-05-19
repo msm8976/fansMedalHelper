@@ -18,7 +18,7 @@ class Config:
         "LIKE_CD": 1,
         "DANMAKU_CD": 3,
         "DANMAKU_NUM": 10,
-        "WATCHINGLIVE": 45,
+        "WATCHINGLIVE": 0,
         "WEARMEDAL": 1,
         "SIGNINGROUP": 2,
         "PROXY": "",
