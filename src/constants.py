@@ -64,6 +64,7 @@ class BiliConstants:
     # 任务相关
     class Tasks:
         MAX_RETRY_TIMES = 10
+        WATCH_INTIMACY_LIMIT = 10
         LIKE_CLICK_MIN = 30
         LIKE_CLICK_MAX = 30
         HEARTBEAT_INTERVAL = 60  # 秒
