@@ -12,7 +12,7 @@ from .constants import BiliConstants
 from .exceptions import LoginError
 from .logger_manager import LogManager
 from .services import AuthService, DanmakuService, GroupService, HeartbeatService, LikeService, MedalService
-from .stats_service import StatsService
+from .stats_service import ReportContext, StatsService
 
 
 class BiliUser:
@@ -31,10 +31,11 @@ class BiliUser:
 
         # 勋章列表
         self.medals: list[dict[str, Any]] = []
-        self.medalsNeedDo: list[dict[str, Any]] = []
-        self.medalsOthers: list[dict[str, Any]] = []
+        self.medalsNeedWatch: list[dict[str, Any]] = []
         self.medalsLiving: list[dict[str, Any]] = []
         self.medalsNoLiving: list[dict[str, Any]] = []
+        self.medalsBeforeTasks: list[dict[str, Any]] = []
+        self.taskActions: dict[int, set[str]] = {}
 
         # 会话和API
         self.session = ClientSession(
@@ -55,7 +56,7 @@ class BiliUser:
         self.retry_times: int = 0
         self.max_retry_times: int = BiliConstants.Tasks.MAX_RETRY_TIMES
         self.message: list[str] = []
-        self.errmsg: list[str] = ["错误日志："]
+        self.errmsg: list[str] = []
         self.uuids: list[str] = [str(uuid.uuid4()) for _ in range(2)]
 
         # 日志
@@ -118,17 +119,14 @@ class BiliUser:
         self._clear_medal_lists()
 
         # 设置分类后的勋章
-        self.medalsNeedDo = classified_medals['need_do']
-        self.medalsOthers = classified_medals['others']
+        self.medals = classified_medals['all']
+        self.medalsNeedWatch = classified_medals['need_watch']
         self.medalsLiving = classified_medals['living']
         self.medalsNoLiving = classified_medals['no_living']
 
-        # 保持兼容性
-        self.medals = self.medalsNeedDo + self.medalsOthers
-
     def _clear_medal_lists(self):
         """清空勋章列表"""
-        for attr in ['medals', 'medalsNeedDo', 'medalsOthers', 'medalsLiving', 'medalsNoLiving']:
+        for attr in ['medals', 'medalsNeedWatch', 'medalsLiving', 'medalsNoLiving']:
             getattr(self, attr).clear()
 
     async def init(self):
@@ -145,20 +143,18 @@ class BiliUser:
 
         # 获取勋章信息
         await self.get_medals()
+        self.medalsBeforeTasks = list(self.medals)
+        self.taskActions = self._collect_task_actions()
 
         tasks = []
 
-        if self.medalsNeedDo:
-            living_medals_need_do = [
-                medal for medal in self.medalsNeedDo
-                if medal['room_info']['living_status'] == 1
-            ]
-            tasks.extend([
-                self.like_service.execute(living_medals_need_do, self.config),
-                self.heartbeat_service.execute(self.medalsNeedDo, self.config),
-            ])
+        if self.medalsLiving:
+            tasks.append(self.like_service.execute(self.medalsLiving, self.config))
+
+        if self.medalsNeedWatch:
+            tasks.append(self.heartbeat_service.execute(self.medalsNeedWatch, self.config))
         else:
-            self.log.info("所有牌子已满 30 亲密度")
+            self.log.info(f"所有牌子已满 {BiliConstants.Tasks.WATCH_INTIMACY_LIMIT} 观看亲密度")
 
         # 执行弹幕和应援团任务
         tasks.extend([
@@ -169,22 +165,60 @@ class BiliUser:
         # 等待其他任务完成（维持原始程序逻辑）
         await asyncio.gather(*tasks, return_exceptions=True)
 
+    def _collect_task_actions(self) -> dict[int, set[str]]:
+        actions: dict[int, set[str]] = {}
+
+        if self.config.get('LIKE_CD') and self.medalsLiving:
+            self._add_task_actions(actions, self.medalsLiving, "点赞")
+
+        if self.config.get('WATCHINGLIVE') and self.medalsNeedWatch:
+            self._add_task_actions(actions, self.medalsNeedWatch, "观看")
+
+        danmaku_enabled = self.config.get('DANMAKU_CD') and self.config.get('DANMAKU_NUM')
+        if danmaku_enabled and self.medalsNoLiving:
+            self._add_task_actions(actions, self.medalsNoLiving, "弹幕")
+
+        return actions
+
+    def _add_task_actions(
+        self,
+        actions: dict[int, set[str]],
+        medals: list[dict[str, Any]],
+        action: str,
+    ) -> None:
+        for medal in medals:
+            target_id = medal['medal']['target_id']
+            actions.setdefault(target_id, set()).add(action)
+
     async def send_msg(self):
         """发送消息统计"""
         if not self.is_login:
             await self.session.close()
-            return self.message + self.errmsg
+            return self.message + self._error_messages()
 
         # 重新获取勋章数据以确保统计的准确性（按照原始项目逻辑，不显示日志）
         await self.get_medals(show_logs=False)
 
         # 使用统计服务生成报告
-        initial_medal = getattr(self, 'initialMedal', None)
-        report_messages = await self.stats_service.execute(self.medals, initial_medal)
+        report_context = ReportContext(
+            initial_medal=getattr(self, 'initialMedal', None),
+            before_medals=self.medalsBeforeTasks,
+            task_actions=self.taskActions,
+        )
+        report_messages = await self.stats_service.execute(
+            self.medals,
+            report_context,
+        )
         self.message.extend(report_messages)
 
         await self.session.close()
-        return self.message + self.errmsg + ['---']
+        return self.message + self._error_messages() + ['---']
+
+    def _error_messages(self) -> list[str]:
+        if not self.errmsg:
+            return []
+
+        return ["错误日志：", *self.errmsg]
 
     async def __aenter__(self):
         """异步上下文管理器入口"""
