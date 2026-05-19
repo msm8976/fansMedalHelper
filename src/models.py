@@ -2,7 +2,7 @@
 数据模型模块
 """
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 @dataclass
@@ -19,7 +19,7 @@ class Medal:
     is_lighted: bool
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Medal':
+    def from_dict(cls, data: dict[str, Any]) -> 'Medal':
         """从字典创建勋章对象"""
         medal_data = data.get('medal', {})
         return cls(
@@ -42,7 +42,7 @@ class RoomInfo:
     living_status: int
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'RoomInfo':
+    def from_dict(cls, data: dict[str, Any]) -> 'RoomInfo':
         """从字典创建直播间信息对象"""
         room_data = data.get('room_info', {})
         return cls(
@@ -58,7 +58,7 @@ class AnchorInfo:
     nick_name: str
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'AnchorInfo':
+    def from_dict(cls, data: dict[str, Any]) -> 'AnchorInfo':
         """从字典创建主播信息对象"""
         anchor_data = data.get('anchor_info', {})
         return cls(
@@ -75,7 +75,7 @@ class MedalWithRoom:
     anchor_info: AnchorInfo
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'MedalWithRoom':
+    def from_dict(cls, data: dict[str, Any]) -> 'MedalWithRoom':
         """从字典创建勋章和直播间对象"""
         return cls(
             medal=Medal.from_dict(data),
@@ -89,8 +89,8 @@ class UserInfo:
     """用户信息数据模型"""
     mid: int
     name: str
-    medal: Optional[Dict[str, Any]] = None
-    raw_data: Optional[Dict[str, Any]] = None
+    medal: dict[str, Any] | None = None
+    raw_data: dict[str, Any] | None = None
 
 
 @dataclass
@@ -101,7 +101,7 @@ class Group:
     owner_uid: int
 
     @classmethod
-    def from_dict(cls, data: Dict[str, Any]) -> 'Group':
+    def from_dict(cls, data: dict[str, Any]) -> 'Group':
         """从字典创建应援团对象"""
         return cls(
             group_id=data.get('group_id', 0),

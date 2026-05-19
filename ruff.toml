@@ -1,0 +1,37 @@
+line-length = 120
+target-version = "py313"
+
+# 排除的文件或目录
+exclude = [
+    "build/",       # 构建输出目录
+    "dist/",        # 分发文件目录
+    "*.egg-info/",  # Python 包的元数据目录
+    "__pycache__/", # Python 缓存文件目录
+    ".pytest_cache/", # pytest 缓存目录
+    ".mypy_cache/", # mypy 缓存目录
+    ".venv/",       # 虚拟环境目录
+    "venv/",        # 虚拟环境目录
+    "env/",         # 虚拟环境目录
+    "tests/data/",  # 测试数据目录
+    "**/*.json",    # 所有 JSON 文件
+    "**/*.csv",     # 所有 CSV 文件
+    "**/*.xml",     # 所有 XML 文件
+    "migrations/",  # Django 迁移文件目录
+    "**/generated/", # 自动生成的代码目录
+    "vendor/",      # 第三方库目录
+    "lib/",         # 第三方库目录
+    ".*",           # 所有隐藏文件和目录
+    ".git/",        # Git 目录
+    ".github/",     # GitHub 配置目录
+    ".idea/",       # PyCharm 配置目录
+    ".vscode/",     # VS Code 配置目录
+    "**/__init__.py", # 所有 __init__.py 文件
+    "setup.py",     # 项目的 setup.py 文件
+    "requirements.txt", # 依赖文件
+    "*.log",        # 所有日志文件
+    "**/*.ipynb",   # 所有 Jupyter Notebook 文件
+]
+
+[lint]
+select = ["E", "F", "W", "I", "C4", "UP"]
+ignore = []

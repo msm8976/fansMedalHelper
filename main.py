@@ -8,7 +8,6 @@ import signal
 import sys
 import threading
 import warnings
-from typing import List
 
 import aiohttp
 
@@ -72,7 +71,7 @@ class FansMedalHelper:
                         asyncio.gather(*cleanup_tasks, return_exceptions=True),
                         timeout=2.0  # 最多等待2秒
                     )
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self.log.warning("清理超时，强制退出")
         except Exception as e:
             self.log.error(f"立即清理失败: {e}")
@@ -111,7 +110,7 @@ class FansMedalHelper:
 
             self._current_users.clear()
 
-    async def initialize_users(self, users_config: List[dict]) -> List[BiliUser]:
+    async def initialize_users(self, users_config: list[dict]) -> list[BiliUser]:
         """初始化用户列表"""
         users = []
         init_tasks = []
@@ -148,18 +147,9 @@ class FansMedalHelper:
         """合并用户配置和全局配置"""
         merged_config = self.config.config.copy()
 
-        # 用户级别配置项（会覆盖全局配置）
-        user_specific_keys = [
-            'coin_remain', 'coin_uid', 'coin_max', 'coin_max_per_uid'
-        ]
-
-        for key in user_specific_keys:
-            if key in user_config:
-                merged_config[key] = user_config[key]
-
         return merged_config
 
-    async def execute_tasks(self, users: List[BiliUser]) -> List[str]:
+    async def execute_tasks(self, users: list[BiliUser]) -> list[str]:
         """执行所有用户的任务"""
         message_list = []
 
@@ -202,7 +192,7 @@ class FansMedalHelper:
 
         return message_list
 
-    async def push_notifications(self, session: aiohttp.ClientSession, messages: List[str]):
+    async def push_notifications(self, session: aiohttp.ClientSession, messages: list[str]):
         """推送通知"""
         try:
             notification_config = self.config.get_notification_config()
@@ -218,7 +208,7 @@ class FansMedalHelper:
         except Exception as e:
             self.log.error(f"推送通知失败: {e}")
 
-    async def _push_to_server_chan(self, session: aiohttp.ClientSession, sendkey: str, messages: List[str]):
+    async def _push_to_server_chan(self, session: aiohttp.ClientSession, sendkey: str, messages: list[str]):
         """推送到Server酱"""
         content = "  \n".join(messages)
         data = {
@@ -235,7 +225,7 @@ class FansMedalHelper:
         except Exception as e:
             self.log.error(f"Server酱推送异常: {e}")
 
-    async def _push_to_more_platforms(self, messages: List[str], morepush_config: dict):
+    async def _push_to_more_platforms(self, messages: list[str], morepush_config: dict):
         """推送到更多平台"""
         try:
             from onepush import notify

@@ -2,7 +2,6 @@
 日志管理模块
 """
 import sys
-from typing import Optional
 
 from loguru import logger
 
@@ -13,14 +12,17 @@ class LogManager:
     _initialized = False
 
     @classmethod
-    def setup_logger(cls, user: Optional[str] = None):
+    def setup_logger(cls, user: str | None = None):
         """设置日志"""
         if not cls._initialized:
             logger.remove()
             logger.add(
                 sys.stdout,
                 colorize=True,
-                format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> <blue> {extra[user]} </blue> <level>{message}</level>",
+                format=(
+                    "<green>{time:YYYY-MM-DD HH:mm:ss}</green> "
+                    "<blue> {extra[user]} </blue> <level>{message}</level>"
+                ),
                 backtrace=True,
                 diagnose=True,
             )

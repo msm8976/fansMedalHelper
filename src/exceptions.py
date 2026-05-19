@@ -1,13 +1,12 @@
 """
 异常处理模块
 """
-from typing import Optional
 
 
 class BiliException(Exception):
     """B站API异常基类"""
 
-    def __init__(self, message: str, code: Optional[int] = None):
+    def __init__(self, message: str, code: int | None = None):
         self.message = message
         self.code = code
         super().__init__(self.message)

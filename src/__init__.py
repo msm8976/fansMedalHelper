@@ -4,7 +4,7 @@ from .constants import BiliConstants
 from .exceptions import BiliApiError, BiliException, ConfigError, LoginError
 from .logger_manager import LogManager
 from .models import AnchorInfo, Group, Medal, MedalWithRoom, RoomInfo, UserInfo
-from .services import (AuthService, BaseService, CoinService, DanmakuService, GroupService,
+from .services import (AuthService, BaseService, DanmakuService, GroupService,
                        HeartbeatService, LikeService, MedalService)
 from .stats_service import StatsService
 from .user import BiliUser
@@ -32,7 +32,6 @@ __all__ = [
     'LikeService',
     'DanmakuService',
     'HeartbeatService',
-    'CoinService',
     'GroupService',
     'StatsService',
     'Crypto',

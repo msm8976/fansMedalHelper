@@ -1,7 +1,6 @@
 """
 常量定义模块
 """
-from typing import List
 
 
 class BiliConstants:
@@ -14,11 +13,15 @@ class BiliConstants:
 
     # Headers
     HEADERS = {
-        "User-Agent": "Mozilla/5.0 BiliDroid/6.73.1 (bbcallen@gmail.com) os/android model/Mi 10 Pro mobi_app/android build/6731100 channel/xiaomi innerVer/6731110 osVer/12 network/2",
+        "User-Agent": (
+            "Mozilla/5.0 BiliDroid/6.73.1 (bbcallen@gmail.com) os/android "
+            "model/Mi 10 Pro mobi_app/android build/6731100 channel/xiaomi "
+            "innerVer/6731110 osVer/12 network/2"
+        ),
     }
 
     # 弹幕内容
-    DANMAKU_LIST: List[str] = [
+    DANMAKU_LIST: list[str] = [
         "(⌒▽⌒).",
         "（￣▽￣）.",
         "(=・ω・=).",
@@ -50,12 +53,6 @@ class BiliConstants:
         WEAR_MEDAL = "https://api.live.bilibili.com/xlive/app-room/v1/fansMedal/wear"
         GROUPS = "https://api.vc.bilibili.com/link_group/v1/member/my_groups"
         SIGN_IN_GROUPS = "https://api.vc.bilibili.com/link_setting/v1/link_setting/sign_in"
-
-        # 投币相关
-        VIDEO_COINS_STATUS = "https://api.bilibili.com/x/web-interface/archive/coins"
-        COIN_VIDEO = "https://app.bilibili.com/x/v2/view/coin/add"
-        USER_VIDEOS = "https://app.biliapi.com/x/v2/space/archive/cursor"
-        MY_INFO = "https://app.bilibili.com/x/v2/account/myinfo"
 
     # 错误码
     class ErrorCodes:

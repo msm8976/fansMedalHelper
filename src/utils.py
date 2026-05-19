@@ -5,7 +5,7 @@ import hashlib
 import json
 import random
 import time
-from typing import Any, Dict, Union
+from typing import Any
 from urllib.parse import urlencode
 
 from .constants import BiliConstants
@@ -15,14 +15,14 @@ class Crypto:
     """加密工具类"""
 
     @staticmethod
-    def md5(data: Union[str, bytes]) -> str:
+    def md5(data: str | bytes) -> str:
         """生成MD5哈希"""
         if isinstance(data, str):
             return hashlib.md5(data.encode()).hexdigest()
         return hashlib.md5(data).hexdigest()
 
     @staticmethod
-    def sign(data: Union[str, dict]) -> str:
+    def sign(data: str | dict) -> str:
         """生成签名"""
         if isinstance(data, dict):
             _str = urlencode(data)
@@ -48,7 +48,7 @@ class SignableDict(dict):
         return {**_sorted, "sign": Crypto.sign(_sorted)}
 
 
-def client_sign(data: Dict[str, Any]) -> str:
+def client_sign(data: dict[str, Any]) -> str:
     """客户端签名"""
     _str = json.dumps(data, separators=(",", ":"))
     for algorithm in ["sha512", "sha3_512", "sha384", "sha3_384", "blake2b"]:
@@ -67,7 +67,7 @@ def get_timestamp() -> int:
     return int(time.time())
 
 
-def safe_get(data: Dict[str, Any], *keys, default=None):
+def safe_get(data: dict[str, Any], *keys, default=None):
     """安全获取嵌套字典值"""
     for key in keys:
         if isinstance(data, dict) and key in data:

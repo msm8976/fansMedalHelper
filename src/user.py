@@ -3,7 +3,7 @@
 """
 import asyncio
 import uuid
-from typing import Any, Dict, List
+from typing import Any
 
 from aiohttp import ClientSession, ClientTimeout
 
@@ -11,31 +11,30 @@ from .api import BiliApi
 from .constants import BiliConstants
 from .exceptions import LoginError
 from .logger_manager import LogManager
-from .services import (AuthService, DanmakuService, GroupService,
-                       HeartbeatService, LikeService, MedalService, CoinService)
+from .services import AuthService, DanmakuService, GroupService, HeartbeatService, LikeService, MedalService
 from .stats_service import StatsService
 
 
 class BiliUser:
     """B站用户类"""
 
-    def __init__(self, access_token: str, white_uids: str = '', banned_uids: str = '', config: Dict[str, Any] = None):
+    def __init__(self, access_token: str, white_uids: str = '', banned_uids: str = '', config: dict[str, Any] = None):
         # 基本信息
         self.mid: int = 0
         self.name: str = ""
         self.access_key: str = access_token
-        self.config: Dict[str, Any] = config or {}
+        self.config: dict[str, Any] = config or {}
         self.is_login: bool = False
 
         # 解析白名单和黑名单
         self._parse_uid_lists(white_uids, banned_uids)
 
         # 勋章列表
-        self.medals: List[Dict[str, Any]] = []
-        self.medalsNeedDo: List[Dict[str, Any]] = []
-        self.medalsOthers: List[Dict[str, Any]] = []
-        self.medalsLiving: List[Dict[str, Any]] = []
-        self.medalsNoLiving: List[Dict[str, Any]] = []
+        self.medals: list[dict[str, Any]] = []
+        self.medalsNeedDo: list[dict[str, Any]] = []
+        self.medalsOthers: list[dict[str, Any]] = []
+        self.medalsLiving: list[dict[str, Any]] = []
+        self.medalsNoLiving: list[dict[str, Any]] = []
 
         # 会话和API
         self.session = ClientSession(
@@ -50,15 +49,14 @@ class BiliUser:
         self.danmaku_service = DanmakuService(self.api)
         self.heartbeat_service = HeartbeatService(self.api)
         self.group_service = GroupService(self.api)
-        self.coin_service = CoinService(self.api, self.whiteList, self.bannedList)
         self.stats_service = None  # 将在登录验证后初始化
 
         # 任务状态
         self.retry_times: int = 0
         self.max_retry_times: int = BiliConstants.Tasks.MAX_RETRY_TIMES
-        self.message: List[str] = []
-        self.errmsg: List[str] = ["错误日志："]
-        self.uuids: List[str] = [str(uuid.uuid4()) for _ in range(2)]
+        self.message: list[str] = []
+        self.errmsg: list[str] = ["错误日志："]
+        self.uuids: list[str] = [str(uuid.uuid4()) for _ in range(2)]
 
         # 日志
         self.log = LogManager.get_system_logger()  # 初始化系统日志，登录成功后会更新为用户专用日志
@@ -91,8 +89,6 @@ class BiliUser:
             self.danmaku_service = DanmakuService(self.api, self.log)
             self.heartbeat_service = HeartbeatService(self.api, self.log)
             self.group_service = GroupService(self.api, self.log)
-            self.coin_service = CoinService(self.api, self.whiteList, self.bannedList, self.log)
-
             # 获取初始佩戴勋章信息
             if user_info.medal:
                 medal_info = await self.api.getMedalsInfoByUid(user_info.medal['target_id'])
@@ -166,13 +162,6 @@ class BiliUser:
             self.danmaku_service.execute(self.medalsNoLiving, self.config),
             self.group_service.execute(self.config),
         ])
-
-        # 执行投币任务并获取结果
-        coin_result = await self.coin_service.execute(self.config)
-        
-        # 将投币结果传递给统计服务
-        if hasattr(self, 'stats_service') and self.stats_service:
-            self.stats_service.set_coin_stats(coin_result)
 
         # 等待其他任务完成（维持原始程序逻辑）
         await asyncio.gather(*tasks, return_exceptions=True)
