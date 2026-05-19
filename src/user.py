@@ -150,8 +150,12 @@ class BiliUser:
 
         if self.medalsNeedDo:
             self.log.info(f"共有 {len(self.medalsNeedDo)} 个牌子未满 30 亲密度")
+            living_medals_need_do = [
+                medal for medal in self.medalsNeedDo
+                if medal['room_info']['living_status'] == 1
+            ]
             tasks.extend([
-                self.like_service.execute(self.medalsLiving, self.config),
+                self.like_service.execute(living_medals_need_do, self.config),
                 self.heartbeat_service.execute(self.medalsNeedDo, self.config),
             ])
         else:

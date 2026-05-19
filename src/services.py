@@ -2,6 +2,7 @@
 业务服务层模块
 """
 import asyncio
+import random
 from abc import ABC, abstractmethod
 from typing import Any
 
@@ -180,38 +181,41 @@ class LikeService(BaseService):
         self.log.info("同步点赞任务开始....")
 
         for index, medal in enumerate(medals):
-            for i in range(BiliConstants.Tasks.LIKE_COUNT_SYNC):
-                if config.get('LIKE_CD'):
-                    await self.api.likeInteractV3(
-                        medal['room_info']['room_id'],
-                        medal['medal']['target_id'],
-                        self.api.u.mid
-                    )
-                await asyncio.sleep(config.get('LIKE_CD', 1))
+            click_time = random.randint(
+                BiliConstants.Tasks.LIKE_CLICK_MIN,
+                BiliConstants.Tasks.LIKE_CLICK_MAX,
+            )
+            await self.api.likeInteractV3(
+                medal['room_info']['room_id'],
+                medal['medal']['target_id'],
+                self.api.u.mid,
+                click_time=click_time,
+            )
 
             self.log.success(
-                f"{medal['anchor_info']['nick_name']} 点赞{i+1}次成功 "
+                f"{medal['anchor_info']['nick_name']} 点赞{click_time}次成功 "
                 f"{index+1}/{len(medals)}"
             )
+            await asyncio.sleep(config.get('LIKE_CD', 1))
 
     async def _async_like(self, medals: list[dict[str, Any]], config: dict[str, Any]):
         """异步点赞"""
         self.log.info("异步点赞任务开始....")
 
-        for i in range(BiliConstants.Tasks.LIKE_COUNT_ASYNC):
-            if config.get('LIKE_CD'):
-                tasks = [
-                    self.api.likeInteractV3(
-                        medal['room_info']['room_id'],
-                        medal['medal']['target_id'],
-                        self.api.u.mid
-                    )
-                    for medal in medals
-                ]
-                await asyncio.gather(*tasks)
-
-            self.log.success(f"异步点赞第{i+1}次成功")
-            await asyncio.sleep(config.get('LIKE_CD', 1))
+        tasks = [
+            self.api.likeInteractV3(
+                medal['room_info']['room_id'],
+                medal['medal']['target_id'],
+                self.api.u.mid,
+                click_time=random.randint(
+                    BiliConstants.Tasks.LIKE_CLICK_MIN,
+                    BiliConstants.Tasks.LIKE_CLICK_MAX,
+                ),
+            )
+            for medal in medals
+        ]
+        await asyncio.gather(*tasks)
+        self.log.success(f"异步点赞{len(medals)}个牌子成功")
 
     async def execute(self, medals: list[dict[str, Any]], config: dict[str, Any]) -> bool:
         """执行点赞任务"""
