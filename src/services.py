@@ -124,7 +124,8 @@ class MedalService(BaseService):
             if room_status != 1 and (danmaku_all_offline or medal_lighted == 0):
                 classified['no_living'].append(medal)
 
-            if today_feed < BiliConstants.Tasks.WATCH_INTIMACY_LIMIT:
+            day_limit = medal_data.get('day_limit', 0)
+            if day_limit == 0 or today_feed < day_limit:
                 classified['need_watch'].append(medal)
 
         return classified
