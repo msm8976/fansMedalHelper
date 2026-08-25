@@ -9,10 +9,9 @@ from aiohttp import ClientSession, ClientTimeout
 
 from .api import BiliApi
 from .constants import BiliConstants
-from .danmaku_state import DanmakuStateStore
 from .exceptions import LoginError
 from .logger_manager import LogManager
-from .services import AuthService, DanmakuService, GroupService, HeartbeatService, LikeService, MedalService
+from .services import AuthService, DanmakuService, HeartbeatService, LikeService, MedalService
 from .stats_service import ReportContext, StatsService
 
 
@@ -45,14 +44,11 @@ class BiliUser:
 
         # 业务服务层
         self.auth_service = AuthService(self.api)
-        self.danmaku_state_store = DanmakuStateStore()
         self.medal_service = MedalService(
             self.api, self.whiteList, self.bannedList)
         self.like_service = LikeService(self.api)
-        self.danmaku_service = DanmakuService(
-            self.api, state_store=self.danmaku_state_store)
+        self.danmaku_service = DanmakuService(self.api)
         self.heartbeat_service = HeartbeatService(self.api)
-        self.group_service = GroupService(self.api)
         self.stats_service = None  # 将在登录验证后初始化
 
         # 任务状态
@@ -90,10 +86,8 @@ class BiliUser:
             self.medal_service = MedalService(
                 self.api, self.whiteList, self.bannedList, self.log)
             self.like_service = LikeService(self.api, self.log)
-            self.danmaku_service = DanmakuService(
-                self.api, self.log, self.danmaku_state_store)
+            self.danmaku_service = DanmakuService(self.api, self.log)
             self.heartbeat_service = HeartbeatService(self.api, self.log)
-            self.group_service = GroupService(self.api, self.log)
             # 获取初始佩戴勋章信息
             if user_info.medal:
                 medal_info = await self.api.getMedalsInfoByUid(user_info.medal['target_id'])
@@ -160,11 +154,8 @@ class BiliUser:
         else:
             self.log.info(f"所有牌子已满 {BiliConstants.Tasks.WATCH_INTIMACY_LIMIT} 观看亲密度")
 
-        # 执行弹幕和应援团任务
-        tasks.extend([
-            self.danmaku_service.execute(self.medalsNoLiving, self.config),
-            self.group_service.execute(self.config),
-        ])
+        # 执行弹幕任务
+        tasks.append(self.danmaku_service.execute(self.medalsNoLiving, self.config))
 
         # 等待其他任务完成（维持原始程序逻辑）
         await asyncio.gather(*tasks, return_exceptions=True)

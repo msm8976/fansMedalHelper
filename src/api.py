@@ -235,7 +235,7 @@ class BiliApi:
                 try:
                     await asyncio.sleep(self.u.config.get("DANMAKU_CD", 3))
                     params.update({"ts": get_timestamp()})
-                    retry_message = "111"
+                    retry_message = "你好"
                     data.update({"msg": retry_message})
 
                     resp = await self.session.post(
@@ -373,30 +373,6 @@ class BiliApi:
             "ts": get_timestamp(),
         }
         return await self._post(url, data=SignableDict(data).signed, headers=self.headers)
-
-    async def getGroups(self):
-        """获取应援团列表"""
-        url = BiliConstants.URLs.GROUPS
-        params = {
-            "access_key": self.u.access_key,
-            "actionKey": "appkey",
-            "appkey": BiliConstants.APPKEY,
-            "ts": get_timestamp(),
-        }
-        res = await self._get(url, params=SignableDict(params).signed, headers=self.headers)
-        for group in res["list"]:
-            yield group
-
-    async def signInGroups(self, group_id: int, owner_id: int):
-        """应援团签到"""
-        url = BiliConstants.URLs.SIGN_IN_GROUPS
-        params = {
-            "access_key": self.u.access_key,
-            "actionKey": "appkey",
-            "appkey": BiliConstants.APPKEY,
-            "ts": get_timestamp(),
-        }
-        return await self._get(url, params=SignableDict(params).signed, headers=self.headers)
 
     async def getOneBattery(self):
         """获取电池"""

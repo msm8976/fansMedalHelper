@@ -8,7 +8,6 @@ from typing import Any
 
 from .api import BiliApi
 from .constants import BiliConstants
-from .danmaku_state import DanmakuStateStore
 from .exceptions import BiliException, LoginError
 from .logger_manager import LogManager
 from .models import UserInfo
@@ -214,10 +213,6 @@ class LikeService(BaseService):
 class DanmakuService(BaseService):
     """弹幕服务"""
 
-    def __init__(self, api: BiliApi, logger=None, state_store: DanmakuStateStore | None = None):
-        super().__init__(api, logger)
-        self.state_store = state_store
-
     async def send_danmaku_to_medals(self, medals: list[dict[str, Any]], config: dict[str, Any]) -> int:
         """向勋章发送弹幕"""
         if not config.get('DANMAKU_CD'):
@@ -246,9 +241,6 @@ class DanmakuService(BaseService):
 
             anchor_name = medal['anchor_info']['nick_name']
             room_id = medal['room_info']['room_id']
-            if self._has_sent_today(room_id, anchor_name):
-                continue
-
             success_messages = []
             for i in range(danmaku_num):
                 if sent_any:
@@ -276,36 +268,9 @@ class DanmakuService(BaseService):
                 self.log.debug(f"{anchor_name}: {ret_msg}")
 
             if len(success_messages) == danmaku_num:
-                self._record_sent(room_id, success_messages[-1])
                 success_count += 1
 
         return success_count
-
-    def _has_sent_today(self, room_id: int, anchor_name: str) -> bool:
-        if self.state_store is None:
-            raise ValueError("弹幕状态存储未初始化")
-
-        try:
-            has_sent = self.state_store.has_sent_today(self.api.u.mid, room_id)
-        except Exception:
-            self.log.exception("读取弹幕状态失败")
-            raise
-
-        if has_sent:
-            self.log.info(f"{anchor_name}: 今日已发送过弹幕，跳过")
-            return True
-
-        return False
-
-    def _record_sent(self, room_id: int, ret_msg: str) -> None:
-        if self.state_store is None:
-            raise ValueError("弹幕状态存储未初始化")
-
-        try:
-            self.state_store.record_sent(self.api.u.mid, room_id, ret_msg)
-        except Exception:
-            self.log.exception("写入弹幕状态失败")
-            raise
 
     def _is_send_success(self, ret_msg: str) -> bool:
         return ret_msg.startswith("弹幕发送成功:")
@@ -367,47 +332,3 @@ class HeartbeatService(BaseService):
     async def execute(self, medals: list[dict[str, Any]], config: dict[str, Any]) -> bool:
         """执行观看任务"""
         return await self.watch_medals(medals, config)
-
-
-class GroupService(BaseService):
-    """应援团服务"""
-
-    async def sign_in_groups(self, config: dict[str, Any]) -> int:
-        """应援团签到"""
-        if not config.get('SIGNINGROUP'):
-            self.log.info("应援团签到任务关闭")
-            return 0
-
-        self.log.info("应援团签到任务开始")
-        success_count = 0
-
-        try:
-            async for group in self.api.getGroups():
-                if group['owner_uid'] == self.api.u.mid:
-                    continue
-
-                try:
-                    await self.api.signInGroups(group['group_id'], group['owner_uid'])
-                    self.log.success(f"{group['group_name']} 签到成功")
-                    success_count += 1
-                    await asyncio.sleep(config.get('SIGNINGROUP', 2))
-
-                except Exception as e:
-                    self.log.error(f"{group['group_name']} 签到失败: {e}")
-                    continue
-
-        except KeyError as e:
-            # 没有应援团时静默处理
-            if str(e) != "'list'":
-                self.log.error(f"获取应援团列表失败: {e}")
-        except Exception as e:
-            self.log.error(f"获取应援团列表失败: {e}")
-
-        if success_count:
-            self.log.success(f"应援团签到任务完成 {success_count}个")
-
-        return success_count
-
-    async def execute(self, config: dict[str, Any]) -> int:
-        """执行应援团签到"""
-        return await self.sign_in_groups(config)

@@ -21,7 +21,6 @@ class Config:
         "DANMAKU_ALL_OFFLINE": 0,
         "WATCHINGLIVE": 0,
         "WEARMEDAL": 1,
-        "SIGNINGROUP": 0,
         "PROXY": "",
     }
 
@@ -68,8 +67,6 @@ class Config:
              lambda x: x >= 0, "WATCHINGLIVE参数错误，必须>=0"),
             ("WEARMEDAL", users.get("WEARMEDAL"),
              [0, 1], "WEARMEDAL参数错误，必须为0或1"),
-            ("SIGNINGROUP", users.get("SIGNINGROUP"),
-             lambda x: x >= 0, "SIGNINGROUP参数错误，必须>=0"),
         ]
 
         for param_name, param_value, validation, error_msg in validations:

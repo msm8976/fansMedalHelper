@@ -91,20 +91,3 @@ class UserInfo:
     name: str
     medal: dict[str, Any] | None = None
     raw_data: dict[str, Any] | None = None
-
-
-@dataclass
-class Group:
-    """应援团数据模型"""
-    group_id: int
-    group_name: str
-    owner_uid: int
-
-    @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> 'Group':
-        """从字典创建应援团对象"""
-        return cls(
-            group_id=data.get('group_id', 0),
-            group_name=data.get('group_name', ''),
-            owner_uid=data.get('owner_uid', 0)
-        )
