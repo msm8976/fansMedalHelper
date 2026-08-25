@@ -18,7 +18,7 @@ from .stats_service import ReportContext, StatsService
 class BiliUser:
     """B站用户类"""
 
-    def __init__(self, access_token: str, white_uids: str = '', banned_uids: str = '', config: dict[str, Any] = None):
+    def __init__(self, access_token: str, white_uids: str = '', banned_uids: str = '', watch_uids: str = '-1', config: dict[str, Any] = None):
         # 基本信息
         self.mid: int = 0
         self.name: str = ""
@@ -26,8 +26,8 @@ class BiliUser:
         self.config: dict[str, Any] = config or {}
         self.is_login: bool = False
 
-        # 解析白名单和黑名单
-        self._parse_uid_lists(white_uids, banned_uids)
+        # 解析任务名单
+        self._parse_uid_lists(white_uids, banned_uids, watch_uids)
 
         # 勋章列表
         self.medals: list[dict[str, Any]] = []
@@ -36,6 +36,8 @@ class BiliUser:
         self.medalsNoLiving: list[dict[str, Any]] = []
         self.medalsBeforeTasks: list[dict[str, Any]] = []
         self.taskActions: dict[int, set[str]] = {}
+        self.like_attempted: set[int] = set()
+        self.danmaku_attempted: set[int] = set()
 
         # 会话和API
         self.session = ClientSession(
@@ -45,7 +47,7 @@ class BiliUser:
         # 业务服务层
         self.auth_service = AuthService(self.api)
         self.medal_service = MedalService(
-            self.api, self.whiteList, self.bannedList)
+            self.api, self.whiteList, self.bannedList, self.watchList)
         self.like_service = LikeService(self.api)
         self.danmaku_service = DanmakuService(self.api)
         self.heartbeat_service = HeartbeatService(self.api)
@@ -61,15 +63,17 @@ class BiliUser:
         # 日志
         self.log = LogManager.get_system_logger()  # 初始化系统日志，登录成功后会更新为用户专用日志
 
-    def _parse_uid_lists(self, white_uids: str, banned_uids: str):
-        """解析白名单和黑名单"""
+    def _parse_uid_lists(self, white_uids: str, banned_uids: str, watch_uids: str):
+        """解析点赞/弹幕名单和观看名单。"""
         try:
             self.whiteList = [
                 int(x) if x else 0 for x in str(white_uids).split(',')]
             self.bannedList = [
                 int(x) if x else 0 for x in str(banned_uids).split(',')]
+            self.watchList = [
+                int(x) if x else 0 for x in str(watch_uids).split(',')]
         except ValueError:
-            raise ValueError("白名单或黑名单格式错误")
+            raise ValueError("任务 UID 名单格式错误")
 
     async def login_verify(self) -> bool:
         """登录验证"""
@@ -84,7 +88,7 @@ class BiliUser:
 
             # 重新初始化服务，使用用户专有的日志记录器
             self.medal_service = MedalService(
-                self.api, self.whiteList, self.bannedList, self.log)
+                self.api, self.whiteList, self.bannedList, self.watchList, self.log)
             self.like_service = LikeService(self.api, self.log)
             self.danmaku_service = DanmakuService(self.api, self.log)
             self.heartbeat_service = HeartbeatService(self.api, self.log)
@@ -109,9 +113,9 @@ class BiliUser:
             self.is_login = False
             return False
 
-    async def get_medals(self, show_logs: bool = True):
+    async def get_medals(self):
         """获取用户勋章"""
-        classified_medals = await self.medal_service.execute(show_logs, self.config)
+        classified_medals = await self.medal_service.execute(self.config)
 
         # 清空原有勋章列表
         self._clear_medal_lists()
@@ -142,38 +146,63 @@ class BiliUser:
         # 获取勋章信息
         await self.get_medals()
         self.medalsBeforeTasks = list(self.medals)
-        self.taskActions = self._collect_task_actions()
+        self.taskActions = {}
+        self.like_attempted.clear()
+        self.danmaku_attempted.clear()
 
+        watch_medals = list(self.medalsNeedWatch) if self.config.get('WATCHINGLIVE') else []
+        interaction_task = asyncio.create_task(self._run_new_interactions())
+
+        for index, medal in enumerate(watch_medals, 1):
+            self._add_task_actions(self.taskActions, [medal], "观看")
+            await self.heartbeat_service.execute_one(
+                medal,
+                self.config,
+                index,
+                len(watch_medals),
+            )
+
+            if interaction_task.done():
+                await interaction_task
+                await self.get_medals()
+                interaction_task = asyncio.create_task(self._run_new_interactions())
+
+        await interaction_task
+        await self.get_medals()
+        await self._run_new_interactions()
+
+    async def _run_new_interactions(self) -> None:
         tasks = []
 
-        if self.medalsLiving:
-            tasks.append(self.like_service.execute(self.medalsLiving, self.config))
+        if self.config.get('LIKE_CD'):
+            medals = self._not_attempted(self.medalsLiving, self.like_attempted)
+            if medals:
+                self.like_attempted.update(
+                    medal['medal']['target_id'] for medal in medals)
+                self._add_task_actions(self.taskActions, medals, "点赞")
+                tasks.append(self.like_service.execute(medals, self.config))
 
-        if self.medalsNeedWatch:
-            tasks.append(self.heartbeat_service.execute(self.medalsNeedWatch, self.config))
-        else:
-            self.log.info(f"所有牌子已满 {BiliConstants.Tasks.WATCH_INTIMACY_LIMIT} 观看亲密度")
+        if self.config.get('DANMAKU_CD') and self.config.get('DANMAKU_NUM'):
+            medals = self._not_attempted(
+                self.medalsNoLiving, self.danmaku_attempted)
+            if medals:
+                self.danmaku_attempted.update(
+                    medal['medal']['target_id'] for medal in medals)
+                self._add_task_actions(self.taskActions, medals, "弹幕")
+                tasks.append(self.danmaku_service.execute(medals, self.config))
 
-        # 执行弹幕任务
-        tasks.append(self.danmaku_service.execute(self.medalsNoLiving, self.config))
+        if tasks:
+            await asyncio.gather(*tasks, return_exceptions=True)
 
-        # 等待其他任务完成（维持原始程序逻辑）
-        await asyncio.gather(*tasks, return_exceptions=True)
-
-    def _collect_task_actions(self) -> dict[int, set[str]]:
-        actions: dict[int, set[str]] = {}
-
-        if self.config.get('LIKE_CD') and self.medalsLiving:
-            self._add_task_actions(actions, self.medalsLiving, "点赞")
-
-        if self.config.get('WATCHINGLIVE') and self.medalsNeedWatch:
-            self._add_task_actions(actions, self.medalsNeedWatch, "观看")
-
-        danmaku_enabled = self.config.get('DANMAKU_CD') and self.config.get('DANMAKU_NUM')
-        if danmaku_enabled and self.medalsNoLiving:
-            self._add_task_actions(actions, self.medalsNoLiving, "弹幕")
-
-        return actions
+    def _not_attempted(
+        self,
+        medals: list[dict[str, Any]],
+        attempted: set[int],
+    ) -> list[dict[str, Any]]:
+        return [
+            medal for medal in medals
+            if medal['medal']['target_id'] not in attempted
+        ]
 
     def _add_task_actions(
         self,
@@ -192,7 +221,7 @@ class BiliUser:
             return self.message + self._error_messages()
 
         # 重新获取勋章数据以确保统计的准确性（按照原始项目逻辑，不显示日志）
-        await self.get_medals(show_logs=False)
+        await self.get_medals()
 
         # 使用统计服务生成报告
         report_context = ReportContext(

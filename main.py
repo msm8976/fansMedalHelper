@@ -123,6 +123,7 @@ class FansMedalHelper:
                 user_config["access_key"],
                 user_config.get("white_uid", ""),
                 user_config.get("banned_uid", ""),
+                user_config.get("watch_uid", -1),
                 self._merge_user_config(user_config),
             )
 

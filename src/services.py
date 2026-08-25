@@ -59,40 +59,38 @@ class AuthService(BaseService):
 class MedalService(BaseService):
     """勋章管理服务"""
 
-    def __init__(self, api: BiliApi, white_list: list[int], banned_list: list[int], logger=None):
+    def __init__(self, api: BiliApi, white_list: list[int], banned_list: list[int], watch_list: list[int], logger=None):
         super().__init__(api, logger)
         self.white_list = white_list
         self.banned_list = banned_list
+        self.watch_list = watch_list
 
-    async def get_all_medals(self, show_logs: bool = True) -> list[dict[str, Any]]:
+    async def get_all_medals(self) -> list[dict[str, Any]]:
         """获取所有勋章"""
         medals = []
 
         async for medal in self.api.getFansMedalandRoomID():
-            target_id = safe_get(medal, 'medal', 'target_id')
             room_id = safe_get(medal, 'room_info', 'room_id')
-            anchor_name = safe_get(medal, 'anchor_info',
-                                   'nick_name', default='未知用户')
 
             # 必须有直播间
             if room_id == 0:
                 continue
 
-            # 黑名单模式
-            if self.white_list == [0]:
-                if target_id in self.banned_list:
-                    if show_logs:
-                        self.log.warning(f"{anchor_name} 在黑名单中，已过滤")
-                    continue
-                medals.append(medal)
-            else:
-                # 白名单模式
-                if target_id in self.white_list:
-                    if show_logs:
-                        self.log.success(f"{anchor_name} 在白名单中，加入任务")
-                    medals.append(medal)
+            medals.append(medal)
 
         return medals
+
+    def _watch_allowed(self, target_id: int) -> bool:
+        """watch_uid 控制观看任务；-1 关闭，0 不限制。"""
+        if self.watch_list == [-1]:
+            return False
+        return self.watch_list == [0] or target_id in self.watch_list
+
+    def interaction_allowed(self, target_id: int) -> bool:
+        """使用原始黑白名单逻辑控制点赞和弹幕。"""
+        if self.white_list == [0]:
+            return target_id not in self.banned_list
+        return target_id in self.white_list
 
     def classify_medals(
         self,
@@ -114,28 +112,29 @@ class MedalService(BaseService):
                 medal, 'room_info', 'living_status', default=0)
             medal_lighted = medal_data.get("is_lighted", 0)
             today_feed = medal_data.get('today_feed', 0)
+            target_id = medal_data.get('target_id', 0)
+            interaction_allowed = self.interaction_allowed(target_id)
 
             classified['all'].append(medal)
 
-            if room_status == 1:
+            if interaction_allowed and room_status == 1:
                 classified['living'].append(medal)
 
-            if room_status != 1 and (danmaku_all_offline or medal_lighted == 0):
+            if interaction_allowed and room_status != 1 and (danmaku_all_offline or medal_lighted == 0):
                 classified['no_living'].append(medal)
 
             day_limit = medal_data.get('day_limit', 0)
-            if day_limit == 0 or today_feed < day_limit:
+            if self._watch_allowed(target_id) and (day_limit == 0 or today_feed < day_limit):
                 classified['need_watch'].append(medal)
 
         return classified
 
     async def execute(
         self,
-        show_logs: bool = True,
         config: dict[str, Any] | None = None,
     ) -> dict[str, list[dict[str, Any]]]:
         """执行勋章获取和分类"""
-        medals = await self.get_all_medals(show_logs)
+        medals = await self.get_all_medals()
         return self.classify_medals(medals, config)
 
 
@@ -332,3 +331,18 @@ class HeartbeatService(BaseService):
     async def execute(self, medals: list[dict[str, Any]], config: dict[str, Any]) -> bool:
         """执行观看任务"""
         return await self.watch_medals(medals, config)
+
+    async def execute_one(
+        self,
+        medal: dict[str, Any],
+        config: dict[str, Any],
+        index: int,
+        total: int,
+    ) -> None:
+        """执行单个直播间的观看任务。"""
+        await self._watch_single_medal(
+            medal,
+            config.get('WATCHINGLIVE', 0),
+            index,
+            total,
+        )
