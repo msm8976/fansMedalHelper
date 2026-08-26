@@ -51,6 +51,10 @@ class BiliConstants:
         MY_MEDALS = "https://api.live.bilibili.com/xlive/app-ucenter/v1/user/GetMyMedals"
         HEARTBEAT = "https://live-trace.bilibili.com/xlive/data-interface/v1/heartbeat/mobileHeartBeat"
         WEAR_MEDAL = "https://api.live.bilibili.com/xlive/app-room/v1/fansMedal/wear"
+        WIDGET_BANNER_LIST = "https://api.live.bilibili.com/xlive/play-interface/widgetService/GetWidgetBannerList"
+        Q3FANS_SELECT_CAT = "https://api.live.bilibili.com/xlive/custom-activity-interface/activities2026/Q3FansS1MiaoZaiSelectCat"
+        Q3FANS_SIGN_IN = "https://api.live.bilibili.com/xlive/custom-activity-interface/activities2026/Q3FansS1MiaoZaiSignIn"
+        Q3FANS_PET_CAT = "https://api.live.bilibili.com/xlive/custom-activity-interface/activities2026/Q3FansS1MiaoZaiPetCat"
 
     # 错误码
     class ErrorCodes:
@@ -68,3 +72,8 @@ class BiliConstants:
         HEARTBEAT_INTERVAL = 60  # 秒
         DEFAULT_PAGE_SIZE = 50
         MY_MEDALS_PAGE_SIZE = 10
+        Q3FANS_ACTIVITY_ID = 110505
+        Q3FANS_WIDGET_ID = 3310
+        Q3FANS_SELF_PET_MAX_TIMES = 20
+        Q3FANS_SELF_ZERO_GROWTH_LIMIT = 5
+        Q3FANS_ASSIST_PET_MAX_TIMES = 5

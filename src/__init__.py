@@ -5,7 +5,8 @@ from .exceptions import BiliApiError, BiliException, ConfigError, LoginError
 from .logger_manager import LogManager
 from .models import AnchorInfo, Medal, MedalWithRoom, RoomInfo, UserInfo
 from .services import (AuthService, BaseService, DanmakuService,
-                       HeartbeatService, LikeService, MedalService)
+                       HeartbeatService, LikeService, MedalService,
+                       Q3FansService)
 from .stats_service import StatsService
 from .user import BiliUser
 from .utils import Crypto, SignableDict, client_sign, random_string, safe_get
@@ -31,6 +32,7 @@ __all__ = [
     'LikeService',
     'DanmakuService',
     'HeartbeatService',
+    'Q3FansService',
     'StatsService',
     'Crypto',
     'SignableDict',

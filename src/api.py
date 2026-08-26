@@ -83,6 +83,75 @@ class BiliApi:
         async with self.session.post(*args, **kwargs) as resp:
             return self._check_response(await resp.json())
 
+    def _app_auth_params(self) -> dict:
+        return {
+            "access_key": self.u.access_key,
+            "actionKey": "appkey",
+            "appkey": BiliConstants.APPKEY,
+            "ts": get_timestamp(),
+        }
+
+    async def _activity_post(self, url: str, data: dict) -> dict:
+        headers = {
+            **self.headers,
+            "Content-Type": "application/json; charset=utf-8",
+        }
+        async with self.session.post(
+            url,
+            params=SignableDict(self._app_auth_params()).signed,
+            json=data,
+            headers=headers,
+        ) as resp:
+            return await resp.json(content_type=None)
+
+    async def getWidgetBannerList(self, room_id: int) -> dict:
+        """获取直播间挂件，用于判断是否支持亲密喂养活动。"""
+        params = {
+            **self._app_auth_params(),
+            "page_source": 1,
+            "platform": "pc",
+            "position": 0,
+            "position_flag": 0,
+            "room_id": room_id,
+            "source": "web",
+            "web_location": "444.8",
+        }
+        async with self.session.get(
+            BiliConstants.URLs.WIDGET_BANNER_LIST,
+            params=SignableDict(params).signed,
+            headers=self.headers,
+        ) as resp:
+            return await resp.json(content_type=None)
+
+    async def q3FansSelectCat(self, ruid: int) -> dict:
+        return await self._activity_post(
+            BiliConstants.URLs.Q3FANS_SELECT_CAT,
+            {
+                "act_id": BiliConstants.Tasks.Q3FANS_ACTIVITY_ID,
+                "ruid": str(ruid),
+                "cat_type": 2,
+            },
+        )
+
+    async def q3FansSignIn(self, ruid: int) -> dict:
+        return await self._activity_post(
+            BiliConstants.URLs.Q3FANS_SIGN_IN,
+            {
+                "act_id": BiliConstants.Tasks.Q3FANS_ACTIVITY_ID,
+                "ruid": str(ruid),
+            },
+        )
+
+    async def q3FansPetCat(self, ruid: int, target_uid: int) -> dict:
+        return await self._activity_post(
+            BiliConstants.URLs.Q3FANS_PET_CAT,
+            {
+                "act_id": BiliConstants.Tasks.Q3FANS_ACTIVITY_ID,
+                "ruid": str(ruid),
+                "target_uid": str(target_uid),
+            },
+        )
+
     async def getFansMedalandRoomID(self) -> AsyncGenerator[dict]:
         """获取用户粉丝勋章和直播间ID"""
         url = BiliConstants.URLs.FANS_MEDAL_PANEL

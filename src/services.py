@@ -240,6 +240,7 @@ class DanmakuService(BaseService):
 
             anchor_name = medal['anchor_info']['nick_name']
             room_id = medal['room_info']['room_id']
+
             success_messages = []
             for i in range(danmaku_num):
                 if sent_any:
@@ -346,3 +347,283 @@ class HeartbeatService(BaseService):
             index,
             total,
         )
+
+
+class Q3FansService:
+    """跨账号执行亲密喂养活动。"""
+
+    def __init__(self, config: dict[str, Any], logger=None):
+        self.config = config
+        self.log = logger or LogManager.get_system_logger()
+        self.delay = config.get('Q3Fans_CD', 1)
+
+    async def execute(self, users: list[Any]) -> None:
+        if not self.config.get('Q3Fans_ENABLE'):
+            return
+        if not any(
+            self.config.get(key)
+            for key in ('Q3Fans_SIGNIN', 'Q3Fans_PET', 'Q3Fans_ASSIST_PET')
+        ):
+            return
+
+        valid_users = self._valid_users(users)
+        if not valid_users:
+            return
+
+        targets = await self._collect_targets(valid_users)
+        targets = await self._remove_unsupported_rooms(valid_users[0], targets)
+        if not targets:
+            return
+
+        if self.config.get('Q3Fans_SIGNIN'):
+            await asyncio.gather(*(
+                self._sign_in_user(user, self._own_targets(user, targets))
+                for user in valid_users
+            ))
+
+        if self.config.get('Q3Fans_PET'):
+            await asyncio.gather(*(
+                self._pet_own_targets(user, self._own_targets(user, targets))
+                for user in valid_users
+            ))
+
+        if self.config.get('Q3Fans_ASSIST_PET'):
+            await asyncio.gather(*(
+                self._pet_other_targets(user, targets)
+                for user in valid_users
+            ))
+
+    @staticmethod
+    def _valid_users(users: list[Any]) -> list[Any]:
+        result = []
+        seen_uids = set()
+        for user in users:
+            if not user.is_login or user.mid in seen_uids:
+                continue
+            seen_uids.add(user.mid)
+            result.append(user)
+        return result
+
+    async def _collect_targets(self, users: list[Any]) -> list[dict[str, Any]]:
+        medal_results = await asyncio.gather(*(
+            user.medal_service.get_all_medals()
+            for user in users
+        ), return_exceptions=True)
+
+        targets = []
+        seen = set()
+        for user, medals in zip(users, medal_results):
+            if isinstance(medals, Exception):
+                user.log.error(f"亲密喂养获取粉丝牌失败: {medals}")
+                continue
+
+            for medal in medals:
+                ruid = safe_get(medal, 'medal', 'target_id', default=0)
+                room_id = safe_get(medal, 'room_info', 'room_id', default=0)
+                if not ruid or not room_id:
+                    continue
+                if not user.medal_service.interaction_allowed(ruid):
+                    continue
+
+                key = (user.mid, ruid)
+                if key in seen:
+                    continue
+                seen.add(key)
+                targets.append({
+                    'owner': user,
+                    'ruid': ruid,
+                    'room_id': room_id,
+                    'anchor_name': safe_get(
+                        medal, 'anchor_info', 'nick_name', default=str(ruid)
+                    ),
+                })
+
+        return targets
+
+    async def _remove_unsupported_rooms(
+        self,
+        checker: Any,
+        targets: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        rooms = {}
+        for target in targets:
+            rooms.setdefault(target['room_id'], target)
+
+        unsupported_rooms = set()
+        room_items = list(rooms.items())
+        for index, (room_id, target) in enumerate(room_items):
+            try:
+                response = await checker.api.getWidgetBannerList(room_id)
+                if response.get('code') == 0:
+                    banners = (response.get('data') or {}).get('list') or {}
+                    if isinstance(banners, dict):
+                        banners = banners.values()
+                    supported = any(
+                        banner.get('id') == BiliConstants.Tasks.Q3FANS_WIDGET_ID
+                        or '亲密喂养' in str(banner.get('title', ''))
+                        for banner in banners
+                    )
+                    if not supported:
+                        unsupported_rooms.add(room_id)
+                        self.log.warning(
+                            f"{target['anchor_name']}未开启亲密喂养活动，已移除相关目标"
+                        )
+            except Exception:
+                pass
+
+            if index + 1 < len(room_items):
+                await asyncio.sleep(self.delay)
+
+        return [
+            target for target in targets
+            if target['room_id'] not in unsupported_rooms
+        ]
+
+    @staticmethod
+    def _own_targets(user: Any, targets: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        return [target for target in targets if target['owner'].mid == user.mid]
+
+    @staticmethod
+    def _action_data(response: dict | None) -> dict | None:
+        if not response or response.get('code') != 0:
+            return None
+        data = response.get('data')
+        if not isinstance(data, dict) or data.get('code') != 0:
+            return None
+        return data
+
+    @staticmethod
+    def _response_error(response: dict | None) -> str:
+        if not response:
+            return "无响应"
+        if response.get('code') != 0:
+            return f"code={response.get('code')} {response.get('message', '')}".strip()
+        data = response.get('data') or {}
+        return f"data.code={data.get('code')} {data.get('msg', '')}".strip()
+
+    async def _safe_request(self, requester) -> tuple[dict | None, str | None]:
+        try:
+            return await requester(), None
+        except Exception as error:
+            return None, str(error)
+        finally:
+            if self.delay:
+                await asyncio.sleep(self.delay)
+
+    async def _pet_once(
+        self,
+        user: Any,
+        target: dict[str, Any],
+    ) -> tuple[int, str | None]:
+        response, request_error = await self._safe_request(
+            lambda: user.api.q3FansPetCat(
+                target['ruid'], target['owner'].mid
+            ),
+        )
+        if request_error:
+            return 0, request_error
+
+        data = self._action_data(response)
+        if not data:
+            return 0, self._response_error(response)
+
+        return int(data.get('growth_delta') or 0), None
+
+    async def _sign_in_user(self, user: Any, targets: list[dict[str, Any]]) -> None:
+        for target in targets:
+            log_prefix = f"活动签到 {user.name} {target['anchor_name']}"
+            response, request_error = await self._safe_request(
+                lambda: user.api.q3FansSignIn(target['ruid']),
+            )
+            if request_error:
+                user.log.error(f"{log_prefix} 签到失败：{request_error}")
+                continue
+            if self._action_data(response):
+                user.log.success(f"{log_prefix} 签到成功")
+                continue
+
+            data = (response or {}).get('data') or {}
+            if response and response.get('code') == 0 and data.get('code') == 2:
+                selected, select_error = await self._safe_request(
+                    lambda: user.api.q3FansSelectCat(target['ruid']),
+                )
+                if select_error:
+                    user.log.error(
+                        f"{log_prefix} 签到失败：选猫失败，{select_error}"
+                    )
+                    continue
+                if not self._action_data(selected):
+                    user.log.error(
+                        f"{log_prefix} 签到失败：选猫失败，"
+                        f"{self._response_error(selected)}"
+                    )
+                    continue
+
+                retried, retry_error = await self._safe_request(
+                    lambda: user.api.q3FansSignIn(target['ruid']),
+                )
+                if retry_error:
+                    user.log.error(f"{log_prefix} 签到失败：{retry_error}")
+                    continue
+                if not self._action_data(retried):
+                    user.log.error(
+                        f"{log_prefix} 签到失败："
+                        f"{self._response_error(retried)}"
+                    )
+                else:
+                    user.log.success(f"{log_prefix} 签到成功")
+                continue
+
+            user.log.error(
+                f"{log_prefix} 签到失败："
+                f"{self._response_error(response)}"
+            )
+
+    async def _pet_own_targets(self, user: Any, targets: list[dict[str, Any]]) -> None:
+        for target in targets:
+            log_prefix = f"活动摸猫 {user.name} {target['anchor_name']}"
+            total_growth = 0
+            zero_growth_count = 0
+            failed = False
+            for _ in range(BiliConstants.Tasks.Q3FANS_SELF_PET_MAX_TIMES):
+                growth, error = await self._pet_once(user, target)
+                if error:
+                    user.log.error(f"{log_prefix} 错误：{error}")
+                    failed = True
+                    break
+
+                total_growth += growth
+                if growth > 0:
+                    zero_growth_count = 0
+                else:
+                    zero_growth_count += 1
+                    if zero_growth_count >= BiliConstants.Tasks.Q3FANS_SELF_ZERO_GROWTH_LIMIT:
+                        break
+
+            if not failed:
+                user.log.success(f"{log_prefix} 成长值+{total_growth}")
+
+    async def _pet_other_targets(self, user: Any, targets: list[dict[str, Any]]) -> None:
+        for target in targets:
+            if target['owner'].mid == user.mid:
+                continue
+
+            log_prefix = (
+                f"辅助摸猫 {user.name} {target['anchor_name']}"
+                f"（{target['owner'].name}）"
+            )
+            total_growth = 0
+            failed = False
+            for _ in range(BiliConstants.Tasks.Q3FANS_ASSIST_PET_MAX_TIMES):
+                growth, error = await self._pet_once(user, target)
+                if error:
+                    user.log.error(f"{log_prefix}错误：{error}")
+                    failed = True
+                    break
+
+                total_growth += growth
+                if growth > 0:
+                    break
+
+            if not failed and total_growth > 0:
+                user.log.success(f"{log_prefix}成长值+{total_growth}")

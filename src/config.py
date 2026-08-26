@@ -22,6 +22,11 @@ class Config:
         "WATCHINGLIVE": 0,
         "WEARMEDAL": 1,
         "PROXY": "",
+        "Q3Fans_ENABLE": 0,
+        "Q3Fans_SIGNIN": 0,
+        "Q3Fans_PET": 0,
+        "Q3Fans_ASSIST_PET": 0,
+        "Q3Fans_CD": 1,
     }
 
     def __init__(self):
@@ -67,6 +72,16 @@ class Config:
              lambda x: x >= 0, "WATCHINGLIVE参数错误，必须>=0"),
             ("WEARMEDAL", users.get("WEARMEDAL"),
              [0, 1], "WEARMEDAL参数错误，必须为0或1"),
+            ("Q3Fans_ENABLE", users.get("Q3Fans_ENABLE"),
+             [0, 1], "Q3Fans_ENABLE参数错误，必须为0或1"),
+            ("Q3Fans_SIGNIN", users.get("Q3Fans_SIGNIN"),
+             [0, 1], "Q3Fans_SIGNIN参数错误，必须为0或1"),
+            ("Q3Fans_PET", users.get("Q3Fans_PET"),
+             [0, 1], "Q3Fans_PET参数错误，必须为0或1"),
+            ("Q3Fans_ASSIST_PET", users.get("Q3Fans_ASSIST_PET"),
+             [0, 1], "Q3Fans_ASSIST_PET参数错误，必须为0或1"),
+            ("Q3Fans_CD", users.get("Q3Fans_CD"),
+             lambda x: x >= 0, "Q3Fans_CD参数错误，必须>=0"),
         ]
 
         for param_name, param_value, validation, error_msg in validations:

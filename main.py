@@ -11,7 +11,7 @@ import warnings
 
 import aiohttp
 
-from src import BiliUser, Config, LogManager
+from src import BiliUser, Config, LogManager, Q3FansService
 
 __VERSION__ = "1.0.1"
 
@@ -270,6 +270,11 @@ class FansMedalHelper:
             if self._shutdown_event.is_set():
                 self.log.warning("程序启动期间收到退出信号")
                 return
+
+            try:
+                await Q3FansService(self.config.config, self.log).execute(users)
+            except Exception as e:
+                self.log.exception(f"亲密喂养活动执行异常: {e}")
 
             # 执行任务
             messages = await self.execute_tasks(users)
