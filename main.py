@@ -150,6 +150,13 @@ class FansMedalHelper:
 
         return merged_config
 
+    async def _execute_q3_task(self, users: list[BiliUser]) -> None:
+        """执行 Q3 活动"""
+        try:
+            await Q3FansService(self.config.config, self.log).execute(users)
+        except Exception as e:
+            self.log.exception(f"亲密喂养活动执行异常: {e}")
+
     async def execute_tasks(self, users: list[BiliUser]) -> list[str]:
         """执行所有用户的任务"""
         message_list = []
@@ -271,13 +278,11 @@ class FansMedalHelper:
                 self.log.warning("程序启动期间收到退出信号")
                 return
 
-            try:
-                await Q3FansService(self.config.config, self.log).execute(users)
-            except Exception as e:
-                self.log.exception(f"亲密喂养活动执行异常: {e}")
-
-            # 执行任务
-            messages = await self.execute_tasks(users)
+            # 并行执行日常任务与 Q3 任务
+            _, messages = await asyncio.gather(
+                self._execute_q3_task(users),
+                self.execute_tasks(users),
+            )
 
             # 输出消息到日志
             for message in messages:

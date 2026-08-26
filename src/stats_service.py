@@ -66,23 +66,32 @@ class StatsService(BaseService):
             return ["【本轮操作】无"]
 
         before_index = self._index_medals(before_medals)
-        after_index = self._index_medals(after_medals)
-        messages = []
-        has_pending_delta = False
+        seen_target_ids = set()
+        entries = []
 
-        for target_id in sorted(task_actions):
-            medal = after_index.get(target_id) or before_index.get(target_id)
-            if not medal:
+        for medal in after_medals:
+            target_id = safe_get(medal, 'medal', 'target_id')
+            if not target_id:
                 continue
+
+            target_id = int(target_id)
+            if (
+                target_id not in task_actions
+                or target_id not in before_index
+                or target_id in seen_target_ids
+            ):
+                continue
+            seen_target_ids.add(target_id)
 
             name = safe_get(medal, 'anchor_info', 'nick_name', default='未知用户')
             medal_name = safe_get(medal, 'medal', 'medal_name', default='未知粉丝牌')
             delta = self._today_feed_delta(before_index.get(target_id), medal)
-            has_pending_delta = has_pending_delta or delta == 0
-            messages.append(f"【{medal_name}】{name} 今日亲密度 +{delta}")
+            entries.append(
+                (delta, f"【{medal_name}】{name} 今日亲密度 +{delta}")
+            )
 
-        if has_pending_delta:
-            messages.append("注：亲密度更新可能存在延迟。")
+        entries.sort(key=lambda entry: -entry[0])
+        messages = [message for _, message in entries]
 
         return messages or ["【本轮操作】无"]
 
