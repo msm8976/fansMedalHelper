@@ -127,6 +127,15 @@ class MedalService(BaseService):
             if self._watch_allowed(target_id) and (day_limit == 0 or today_feed < day_limit):
                 classified['need_watch'].append(medal)
 
+        if self.watch_list not in ([-1], [0]):
+            watch_order = {
+                target_id: index
+                for index, target_id in enumerate(self.watch_list)
+            }
+            classified['need_watch'].sort(
+                key=lambda medal: watch_order[medal['medal']['target_id']]
+            )
+
         return classified
 
     async def execute(
